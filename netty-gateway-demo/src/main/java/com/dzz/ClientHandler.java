@@ -37,8 +37,7 @@ public class ClientHandler extends ChannelInboundHandlerAdapter {
         if (socketAddress instanceof InetSocketAddress) {
             InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
             ArrayBlockingQueue<Channel> channels = ProxyNettyClient.channelMap.get(inetSocketAddress.getHostName() + ":" + inetSocketAddress.getPort());
-            //这里其实一定不为空
-            if (channel == null) {
+            if (channels == null) {
                 channels = new ArrayBlockingQueue<>(10);
             }
             channels.put(channel);
