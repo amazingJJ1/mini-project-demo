@@ -62,6 +62,7 @@ public class BlockFile {
 
                 if (pageBuffer.remaining() - bytes.length <= 0) {
                     pageBuffer.flip();
+                    //写入pageCache,系统异步刷盘
                     channel.write(pageBuffer);
                     pageBuffer.clear();
                     int i = pageNum.incrementAndGet();
@@ -70,6 +71,10 @@ public class BlockFile {
                 }
                 //pageBuffer不满时，block下标为写入前的下标
                 int position = pageBuffer.position();
+                if (position == 0) {
+                    return 0;
+                }
+
                 pageBuffer.put(bytes);
                 return pageNum.get() * PAGE_SIZE - 1 + position;
             }

@@ -55,6 +55,11 @@ public class QueueStoreImpl extends QueueStore {
 
     @Override
     Collection<byte[]> get(String queueName, long offset, long num) {
-        return null;
+        int i = Math.abs(queueName.hashCode()) % FILE_NUM;
+        BlockQueue queue = queueMaps[i].get(queueName);
+        if (queue == null) {
+            return EMPTY;
+        }
+        return queue.get(offset, num);
     }
 }
