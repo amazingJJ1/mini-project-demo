@@ -22,12 +22,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>com.ppdai.infrastructure</groupId>
-            <artifactId>ipam-java-client</artifactId>
-            <version>0.0.3</version>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
         <dependency>
             <groupId>com.h2database</groupId>
@@ -50,7 +44,6 @@
             <artifactId>commons-lang3</artifactId>
             <version>3.9</version>
         </dependency>
-
 
     </dependencies>
 

@@ -1,4 +1,4 @@
-package com.dzz.algorithm;
+package com.dzz.algorithm.tree;
 
 /**
  * @author zoufeng

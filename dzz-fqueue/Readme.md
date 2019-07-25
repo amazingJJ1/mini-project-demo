@@ -32,6 +32,24 @@ MMAP 众所周知，基于 OS 的 mmap 的内存映射技术，通过 MMU 映射
 那 FileChannel 呢？是零拷贝吗？
 很遗憾，不是。FileChannel 快，只是因为他是基于 block 的。
 
+
+总结下网上测试结果，得出的图片  
+
+| 数据包大小 | 读            | 普通写  | force写 |
+| ------------  |:-------------:|:------------:|:-----:|
+| 小于4K         | mmap   |   |
+| 大于4K     | FileChannel          | 
+| 大于64byte    |          | FileChannel  |FileChannel  |
+| 小于64byte    |           | mmap  |FileChannel  |  
+
+假设，我们的系统的数据包在 1024 - 2048 左右，我们应该使用什么策略？  
+答：读使用 mmap，仅仅写使用 FileChannel。
+再回过头看看 MQ 的实现者们，似乎只有 QMQ 是 这么做的。  
+当然，RocketMQ 也提供了 FileChannel 的写选项。但默认 mmap 写加异步刷盘，应该是 broker busy 的元凶吧。  
+而 Kafka，因为默认不 force，也是使用 FileChannel 进行写入的，为什么使用 FileChannel 读呢？大概是因为消息的大小在 4kb 以上吧。
+这样一揣测，这些 MQ 的设计似乎都非常合理。
+最后，能不用 force 就别用 force。如果要用 force ，就请使用 FileChannel。
+
 ## 存储设计
 消息中间件的高性能点在于顺序读写，pageCache的充分利用
 
