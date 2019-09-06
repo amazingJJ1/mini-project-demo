@@ -1,24 +1,32 @@
-# 文档
 ## 初步设计
-1.io处理，全流程异步
 
-- 代理转发使用netty client【一期任务】
-- rxjava 进行流背压处理
+---
+### 1.io处理，全流程异步
 
-   - 解决channel申请的内存释放
-   - clinet channel的空闲检测,空闲读、写后进行channel关闭
+- 代理转发使用netty client,复用channel,后面参考netty channel pool
    
+   - proxy client channel 空闲检测
+   - proxy client channel 获取时的阻塞策略，如何异步化处理
+   - channel的释放及关闭处理
+- rxjava 进行流背压处理 | netty本身的高低水位流控
+   
+   - 参考zuul2的背压处理
+   - rxNetty的异步调用，futrue和Promise的使用经验
 
-2.与springboot整合，简化部署【一期任务】
 
-- 与springboot actuator整合 内嵌一个tomcat
 
-3.监控
+### 2.监控
 - Metrics 服务接入Prometheus
 - 调用链接入Skywalking?待确认
 
-4.责任链设计
+### 3.责任链设计
+- 扩展性设计，预留接口+pipeline
 
-5.日志处理
+### 4.日志处理
+- jul
+- slf4j+logback
+### 5.管理平台
 
-6.管理平台
+### 6.与springboot整合，简化部署
+
+- 与springboot actuator整合 内嵌一个tomcat

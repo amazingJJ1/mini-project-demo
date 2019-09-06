@@ -3,13 +3,16 @@ package com.dzz;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
+import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.GlobalEventExecutor;
 
 import java.nio.charset.Charset;
 import java.util.concurrent.CountDownLatch;
+import java.util.logging.Logger;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
@@ -20,7 +23,7 @@ import static io.netty.handler.codec.rtsp.RtspResponseStatuses.BAD_REQUEST;
  * @author zoufeng
  * @date 2019/3/25
  */
-public class GatewayServerHandler extends SimpleChannelInboundHandler {
+public class GwServerHandler extends SimpleChannelInboundHandler {
 
     private HttpRequest request;
     private StringBuilder buffer = new StringBuilder();
@@ -30,8 +33,18 @@ public class GatewayServerHandler extends SimpleChannelInboundHandler {
     private GlobalEventExecutor executor = GlobalEventExecutor.INSTANCE;
     private CountDownLatch latch = new CountDownLatch(1);
 
+    private static final Logger logger = Logger.getLogger(GwServerHandler.class.getName());
+
     PooledByteBufAllocator allocator = new PooledByteBufAllocator(false);
 
+    private ProxyNettyClient proxyNettyClient;
+    public static AttributeKey<Channel> PARENT_CHANNEL_KEY = AttributeKey.valueOf("parent.channel");
+    public static AttributeKey<ProxyNettyClient> Client = AttributeKey.valueOf("parent.proxynettyclient");
+
+    public GwServerHandler(ProxyNettyClient proxyNettyClient) {
+        super();
+        this.proxyNettyClient = proxyNettyClient;
+    }
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
@@ -42,13 +55,35 @@ public class GatewayServerHandler extends SimpleChannelInboundHandler {
         }
     }
 
+    /*ByteBuf buf= (ByteBuf) msg;
+       System.out.println(msg);
+       ByteBuf reqmsg = allocator.heapBuffer(buf.readableBytes());
+       Channel parentChannel = ctx.channel();
+       reqmsg.writeBytes(buf);
+       ctx.writeAndFlush(reqmsg);*/
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-        ByteBuf buf= (ByteBuf) msg;
-        System.out.println(msg);
-        ByteBuf reqmsg = allocator.heapBuffer(buf.readableBytes());
-        reqmsg.writeBytes(buf);
-        ctx.writeAndFlush(reqmsg);
+        //使用了HttpObjectAggregator 会将httpHeader和HttpContent合并成一个FullHttpRequest
+        FullHttpRequest fullHttpRequest = null;
+        if (msg instanceof FullHttpRequest) {
+            fullHttpRequest = (FullHttpRequest) msg;
+        }
+        Channel parentChannel = ctx.channel();
+        ByteBuf content = fullHttpRequest.content();
+        ByteBuf reqmsg = allocator.heapBuffer(content.readableBytes());
+        reqmsg.writeBytes(content);
+        DefaultFullHttpRequest request = new DefaultFullHttpRequest(HTTP_1_1, fullHttpRequest.method(), fullHttpRequest.uri(), reqmsg);
+        //模拟路由 省略
+        Channel proxyClientChannel = proxyNettyClient.getProxyClientChannel("localhost", 8080, parentChannel);
+        HttpHeaders headers = fullHttpRequest.headers();
+        request.headers().add(headers);
+        request.headers().remove("Host");
+        request.headers().remove("Connection");
+        request.headers().add("Host", "localhost:8080");
+        request.headers().add("Connection", "keep-alive");
+
+        parentChannel.attr(Client).set(proxyNettyClient);
+        proxyClientChannel.pipeline().writeAndFlush(request);
     }
 
     private void writeResponse(StringBuilder respone, HttpObject current, ChannelHandlerContext ctx) {

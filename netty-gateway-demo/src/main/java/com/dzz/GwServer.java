@@ -9,7 +9,6 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.nio.channels.spi.SelectorProvider;
@@ -25,6 +24,7 @@ public class GwServer {
         EventLoopGroup bossGroup = new NioEventLoopGroup(1, new DefaultThreadFactory("netty.gateway.boss", Thread.MAX_PRIORITY));
         EventLoopGroup workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new DefaultThreadFactory("netty.gateway.worker", Thread.MAX_PRIORITY));
 
+        ProxyNettyClient proxyNettyClient = new ProxyNettyClient();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
@@ -46,11 +46,11 @@ public class GwServer {
                             //支持chunk流编码 用于文件传输
 //                            p.addLast("http-chunked", new ChunkedWriteHandler());
                             p.addLast("http-encoder", new HttpResponseEncoder());
-                            p.addLast(new GatewayServerHandler());
+                            p.addLast(new GwServerHandler(proxyNettyClient));
                         }
                     });
 
-            Channel ch = b.bind(8080).sync().channel();
+            Channel ch = b.bind(9090).sync().channel();
             ch.closeFuture().sync();
 
 

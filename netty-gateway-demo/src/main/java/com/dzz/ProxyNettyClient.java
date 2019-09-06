@@ -3,21 +3,20 @@ package com.dzz;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelId;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.util.Attribute;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 
 /**
@@ -25,6 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * @date 2019/3/26
  */
 public class ProxyNettyClient {
+
+    private Logger logger = Logger.getLogger(ProxyNettyClient.class.getName());
 
     private final EventLoopGroup group = new NioEventLoopGroup(2);
 
@@ -43,17 +44,19 @@ public class ProxyNettyClient {
     private void init() {
         clientBootstrap.group(group);
         clientBootstrap.channel(NioSocketChannel.class);
+        clientBootstrap.option(ChannelOption.SO_KEEPALIVE, true);
         clientBootstrap.handler(new ChannelInitializer<SocketChannel>() {
             @Override
             protected void initChannel(SocketChannel socketChannel) throws Exception {
                 socketChannel.pipeline()
-                        .addLast(new ClientHandler())
-                        .addLast("http-decoder", new HttpRequestDecoder())
+                        .addFirst(new HttpClientCodec())
+//                        .addLast("http-decoder", new HttpRequestDecoder())
                         //聚合
-                        .addLast("http-objectAggregator", new HttpObjectAggregator(65536))
+//                        .addLast("http-objectAggregator", new HttpObjectAggregator(65536))
                         //支持chunk流编码 用于文件传输
                         // p.addLast("http-chunked", new ChunkedWriteHandler());
-                        .addLast("http-encoder", new HttpResponseEncoder());
+//                        .addLast("http-encoder", new HttpResponseEncoder())
+                        .addLast("proxyClient", new ProxyClientHandler());
                 ;
             }
         });
@@ -71,11 +74,10 @@ public class ProxyNettyClient {
 
     public Channel getProxyClientChannel(String inetHost, int inetPort) {
         ArrayBlockingQueue<Channel> queue = channelMap.get(inetHost + ":" + inetPort);
-        if (queue == null) {
+        if (queue == null || queue.size() == 0) {
             return createConnector(inetHost, inetPort);
-        } else {
-            return queue.poll();
         }
+        return queue.poll();
     }
 
     /**
@@ -87,27 +89,30 @@ public class ProxyNettyClient {
      */
     public Channel createConnector(String inetHost, int inetPort) {
         ArrayBlockingQueue<Channel> channelQueue = channelMap.get(inetHost + ":" + inetPort);
-        if (channelQueue == null) {
-            channelQueue = new ArrayBlockingQueue<Channel>(10);
-            channelMap.put(inetHost + ":" + inetPort, channelQueue);
-        }
+        Channel take = null;
         try {
-            Channel channel = clientBootstrap.connect(inetHost, inetPort).sync().channel();
-            ChannelId id = channel.id();
-            channel.closeFuture().addListener(new GenericFutureListener<Future<? super Void>>() {
-                @Override
-                public void operationComplete(Future<? super Void> future) throws Exception {
-                    System.out.println("------------------");
-                    System.out.println(id.asShortText() + "is close!!");
-                }
-            });
 
-            return channelQueue.take();
+            if (channelQueue == null) {
+                channelQueue = new ArrayBlockingQueue<Channel>(10);
+                channelMap.put(inetHost + ":" + inetPort, channelQueue);
 
+                ChannelFuture f = clientBootstrap.connect(inetHost, inetPort).addListener(new GenericFutureListener<Future<? super Void>>() {
+                    @Override
+                    public void operationComplete(Future<? super Void> future) throws Exception {
+                        logger.info("connect ok!");
+                    }
+                }).await();
+                Channel channel = f.channel();
+                channelQueue.add(channel);
+
+
+            }
+            //todo 超时释放
+            take = channelQueue.take();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        return null;
+        return take;
     }
 
     public void proxyWriteMsg(Channel channel, Object obj) {
@@ -117,7 +122,36 @@ public class ProxyNettyClient {
             byteBuf.writeBytes(msg.getBytes());
             channel.writeAndFlush(byteBuf);
         } else {
-            System.out.println("nothing todo");
+            logger.info("nothing todo");
         }
+    }
+
+    public Channel getProxyClientChannel(String inetHost, int inetPort, Channel parentChannel) {
+        Channel proxyClientChannel = getProxyClientChannel(inetHost, inetPort);
+        Attribute<Channel> attr = proxyClientChannel.attr(GwServerHandler.PARENT_CHANNEL_KEY);
+        attr.set(parentChannel);
+        return proxyClientChannel;
+    }
+
+    public void release(Channel channel) {
+        SocketAddress socketAddress = channel.remoteAddress();
+        if (socketAddress instanceof InetSocketAddress) {
+            InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
+            String key = inetSocketAddress.getHostName() + ":" + inetSocketAddress.getPort();
+            ArrayBlockingQueue<Channel> channels = channelMap.get(key);
+            if (channels == null) {
+                channels = new ArrayBlockingQueue<>(10);
+                channelMap.put(key, channels);
+            }
+            try {
+                channels.put(channel);
+                channel.read();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        logger.info("channel active : " + socketAddress.toString());
+        logger.info(channel.id().asShortText() + "is channelActive");
     }
 }
