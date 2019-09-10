@@ -1,5 +1,6 @@
-package com.dzz;
+package com.dzz.nio;
 
+import com.dzz.ProxyClient;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.*;
@@ -18,9 +19,7 @@ import org.junit.Test;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.nio.channels.spi.SelectorProvider;
-import java.util.Map;
 import java.util.Random;
 import java.util.logging.Logger;
 
@@ -29,15 +28,15 @@ import java.util.logging.Logger;
  * @date 2019/3/26
  */
 
-public class ProxyNettyClientTest {
+public class ProxyClientTest {
 
-    private static Logger logger = Logger.getLogger(ProxyNettyClientTest.class.getName());
+    private static Logger logger = Logger.getLogger(ProxyClientTest.class.getName());
 
     @Test
     public void test() throws InterruptedException {
-        ProxyNettyClient proxyNettyClient = new ProxyNettyClient();
-        Channel channel = proxyNettyClient.createConnector("localhost", 8080);
-        proxyNettyClient.proxyWriteMsg(channel, new Random().nextLong() + "");
+        ProxyClient proxyClient = new ProxyClient();
+        Channel channel = proxyClient.createConnector("localhost", 8080);
+        proxyClient.proxyWriteMsg(channel, new Random().nextLong() + "");
         channel.closeFuture().sync();
     }
 
@@ -73,7 +72,7 @@ public class ProxyNettyClientTest {
     public void testHttpRequest() throws InterruptedException {
         Channel channel = null;
 
-        channel = new ProxyNettyClient().getProxyClientChannel("localhost", 8080);
+        channel = new ProxyClient().getProxyClientChannel("localhost", 8080);
 //        channel = getChannel();
 
         QueryStringEncoder encoder = new QueryStringEncoder("http://localhost:8080/api/hello");

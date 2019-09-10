@@ -24,7 +24,7 @@ public class GwServer {
         EventLoopGroup bossGroup = new NioEventLoopGroup(1, new DefaultThreadFactory("netty.gateway.boss", Thread.MAX_PRIORITY));
         EventLoopGroup workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new DefaultThreadFactory("netty.gateway.worker", Thread.MAX_PRIORITY));
 
-        ProxyNettyClient proxyNettyClient = new ProxyNettyClient();
+        ProxyClient proxyClient = new ProxyClient();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
@@ -39,14 +39,13 @@ public class GwServer {
                         @Override
                         protected void initChannel(Channel ch) throws Exception {
                             ChannelPipeline p = ch.pipeline();
-                            //解码
-                            p.addLast("http-decoder", new HttpRequestDecoder());
+                            p.addLast(new HttpRequestDecoder());
                             //聚合
-                            p.addLast("http-objectAggregator", new HttpObjectAggregator(65536));
+                            p.addLast(new HttpObjectAggregator(65536));
                             //支持chunk流编码 用于文件传输
-//                            p.addLast("http-chunked", new ChunkedWriteHandler());
-                            p.addLast("http-encoder", new HttpResponseEncoder());
-                            p.addLast(new GwServerHandler(proxyNettyClient));
+                            // p.addLast("http-chunked", new ChunkedWriteHandler());
+                            p.addLast(new HttpResponseEncoder());
+                            p.addLast(new GwServerHandler(proxyClient));
                         }
                     });
 
@@ -57,6 +56,7 @@ public class GwServer {
         } catch (InterruptedException e) {
             e.printStackTrace();
         } finally {
+            proxyClient.stop();
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }

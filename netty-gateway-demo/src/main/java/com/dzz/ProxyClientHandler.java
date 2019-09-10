@@ -4,7 +4,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.Attribute;
+import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.GenericFutureListener;
 
 import java.util.logging.Logger;
@@ -33,7 +36,7 @@ public class ProxyClientHandler extends ChannelInboundHandlerAdapter {
             this.defaultHttpResponse = (DefaultHttpResponse) msg;
             int len = Integer.valueOf(defaultHttpResponse.headers().get(HttpHeaderNames.CONTENT_LENGTH));
             if (len > 0) {
-                this.body = pooledByteBufAllocator.heapBuffer(len);
+                this.body = pooledByteBufAllocator.directBuffer(len);
             }
         }
 
@@ -52,18 +55,21 @@ public class ProxyClientHandler extends ChannelInboundHandlerAdapter {
                     response.headers().remove(HttpHeaderNames.CONNECTION);
                     response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
                 }
-                ProxyNettyClient proxyNettyClient = parentChannel.attr(GwServerHandler.Client).get();
+                ProxyClient proxyClient = parentChannel.attr(GwServerHandler.Client).get();
 
+                //响应体的byteBuf由tailContext自动释放
                 parentChannel.pipeline().writeAndFlush(response).addListener(new GenericFutureListener<ChannelFuture>() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
-                        proxyNettyClient.release(proxyChannel);
+                        proxyClient.release(proxyChannel);
                         clearProxyClientHandler();
                         logger.info("归还channel到池");
+                        parentChannel.close();
                     }
                 }).addListener(ChannelFutureListener.CLOSE);
             }
         }
+        ReferenceCountUtil.release(msg);
     }
 
 
@@ -71,4 +77,15 @@ public class ProxyClientHandler extends ChannelInboundHandlerAdapter {
         body = null;
     }
 
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (evt instanceof IdleStateEvent) {
+            if (((IdleStateEvent) evt).state().equals(IdleState.READER_IDLE)) {
+                logger.warning(ctx.channel().id() + " 已经30秒没有读取数据了，准备关闭这个channel");
+                ctx.channel().close();
+            }
+        } else {
+            super.userEventTriggered(ctx, evt);
+        }
+    }
 }
