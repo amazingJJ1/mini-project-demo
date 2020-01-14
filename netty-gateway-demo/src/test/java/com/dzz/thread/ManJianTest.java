@@ -22,7 +22,7 @@ public class ManJianTest {
             actualTotalAmount += (unitPrice[i] * nums[i]);
         }
         for (int i = 0; i < unitPrice.length; i++) {
-            //产品活动后的实际单价
+            //活动后的实际单价
             actualUnitPrice[i] = (unitPrice[i] * totalAmount) / actualTotalAmount;
         }
         return actualUnitPrice;
