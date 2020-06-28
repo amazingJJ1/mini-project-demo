@@ -16,7 +16,7 @@ public class MapDfsTest {
             {0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0},
             {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
             {0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0}};
+            {0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0}};
 
     int[][] dir = new int[][]{{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
 
@@ -51,5 +51,37 @@ public class MapDfsTest {
             }
         }
         System.out.println(max);
+    }
+
+    /*
+     *小岛数量 7
+     * */
+    @Test
+    public void testNum() {
+        int color = 0;
+        for (int i = 0; i < map.length; i++) {
+            for (int j = 0; j < map[0].length; j++) {
+                if (map[i][j] == 1) {
+                    color++;
+                    dfsColor(map, i, j, color);
+                }
+            }
+        }
+        System.out.println(color);
+    }
+
+    private void dfsColor(int[][] map, int x0, int y0, int color) {
+        int n = map.length;
+        int m = map[0].length;
+
+        //标记探索过的领域
+        map[x0][y0] = color;
+        for (int i = 0; i < 4; i++) {
+            int x = x0 + dir[i][0];
+            int y = y0 + dir[i][1];
+            if (x >= 0 && x < n && y >= 0 && y < m && map[x][y] == 1) {
+                dfsColor(map, x, y, color);
+            }
+        }
     }
 }

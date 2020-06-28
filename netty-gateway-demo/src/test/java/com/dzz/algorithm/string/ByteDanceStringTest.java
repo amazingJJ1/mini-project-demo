@@ -21,18 +21,19 @@ public class ByteDanceStringTest {
      */
     public int lengthOfLongestSubstring(String s) {
         char[] chars = s.toCharArray();
-        int[] m = new int[256];
+        int[] map = new int[256];
         int res = 0;
         int left = 0;
         for (int i = 0; i < s.length(); ++i) {
             //字符没有出现过或者出现的位置在滑动窗口前，更新子串长度[滑动窗口长度]
-            if (m[chars[i]] == 0 || m[chars[i]] < left) {
+            if (map[chars[i]] == 0 || map[chars[i]] < left) {
                 res = max(res, i - left + 1);
             } else {
                 //记录最新的字符串位置作为左边界，如果她后面比以前的res记录长则后续替换
-                left = m[chars[i]];
+                left = map[chars[i]];
             }
-            m[chars[i]] = i + 1;
+            //记录字符出现的位置
+            map[chars[i]] = i + 1;
         }
         return res;
     }
