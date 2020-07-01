@@ -25,7 +25,7 @@ public class MapBfsTest {
 
     int[][] dir = new int[][]{{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
 
-    private AtomicInteger atomicInteger = new AtomicInteger();
+    private AtomicInteger atomicInteger = new AtomicInteger();//计算遍历次数
 
     @Test
     public void test() {
