@@ -120,15 +120,15 @@ public class DfsTest {
      * 多源最短路径，动态规划
      * 只要5行代码
      * <p>
-     * 分别求出只经历1号节点，只经历1，2号节点的最短路径
+     * 依次加入节点，查看加入节点后对整个路径的影响，选择最短路径
      */
     @Test
     public void testFloyd() {
 
-        for (int i = 0; i < map.length; i++) {
-            for (int j = 0; j < map.length; j++) {
-                for (int k = 0; k < map.length; k++) {
-                    if (map[j][k] > map[j][i] + map[i][k]) {
+        for (int i = 0; i < map.length; i++) {//加入的i个节点
+            for (int j = 0; j < map.length; j++) { //j行
+                for (int k = 0; k < map.length; k++) { //k列
+                    if (map[j][k] > map[j][i] + map[i][k]) { //查看经过第i个节点是否会把距离变短
                         map[j][k] = map[j][i] + map[i][k];
                     }
                 }
