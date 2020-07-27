@@ -1,4 +1,4 @@
-package com.dzz.algorithm;
+package com.dzz.algorithm.graph;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -8,8 +8,46 @@ import java.util.Arrays;
 /**
  * @author zoufeng
  * @date 2019/7/3
+ *
+ * 求最短路径有三个经典算法
+ * 1、多源最短路径，时间复杂度O(n^3),可以解决负权边问题，适合稠密图，和顶点关系密切
+ * 最简单粗暴的是Floyd，依次加入节点，查看每个节点对所有节点之间距离的影响
+ * 代码示例如下：
+ * for (int i = 0; i < map.length; i++) {//加入的i个节点
+ *     for (int j = 0; j < map.length; j++) { //j行
+ *         for (int k = 0; k < map.length; k++) { //k列
+ *             if (map[j][k] > map[j][i] + map[i][k]) { //查看经过第i个节点是否会把距离变短
+ *                 map[j][k] = map[j][i] + map[i][k];
+ *             }
+ *         }
+ *     }
+ * }
+ *
+ * 2、单源最短路径
+ * 2.1 Dijikstra算法，
+ * 原理：只考虑依次加入的节点是否会缩短各节点到源节点的距离，适用于稠密图，和顶点关系密切
+ * 缺点：不能解决负权边
+ * 代码示例：
+ * for (int i = 1; i < 5; i++) {//加入的第i个城市
+ *     //dp数组更新
+ *     for (int j = 1; j < 5; j++) {
+ *         if (map[i][j] != 999) //i号城市不能到达j号城市，没有意义
+ *             dp[j] = Math.min(dp[j], dp[i] + map[i][j]);
+ *     }
+ * }
+ *
+ * 2.2 最屌的最短路径算法，bellman-ford
+ * 原理，只考虑边的加入是否会缩短源点到各点的距离
+ * 比如有M个点，N条边
+ * u,v,w ：起始点->目标点,权重
+ * 如果1号点到v[i]的距离可以通过第i条边变小，获取最短路径，外层第二次循环可以在此基础上考察接用其他边是否同样缩短距离
+ * for i < N-1  (外层循环次数，因为最短路径最多n-1条边)
+ *   for j < M
+ *     dp[v[i]]>dp[u[i]]+w[i]?dp[v[i]]=dp[u[i]]+w[i]
+ *
+ *
  */
-public class DfsTest {
+public class MinPathTest {
 
 
     /**
@@ -175,6 +213,11 @@ public class DfsTest {
      * 2.即在系统发展的不同时刻（或阶段）根据系统所处的状态，不断地做出决策；
      * 3.找到不同时刻的最优决策以及整个过程的最优策略。
      *
+     *
+     * 这里复炸度接近O(n^3),其实还可以继续优化，比如这个例题初始化的dp={0,2,999,999,10},
+     * 说明一开始离1号最近的点是2号点，那么我们可以考虑通过第2号点是否可以缩短1号点到其他点的距离，
+     * 这里2号点的出边是2->3和2->5，我们可以得到通过2号点得到到其他的距离是dp={0,2,5,999,9},
+     * 之后我们继续依次考虑剩下的离1号顶点最近的点，最后得到最短路径，这样算法复杂度就和边数有关，复杂度为0((M+N)logN)
      * */
     @Test
     public void testDp() {
@@ -327,7 +370,7 @@ public class DfsTest {
 
     /*
      * 在上面可以看到BellmanFord算法对边有重复计算（松弛）
-     * 
+     *
      *
      * */
     @Test

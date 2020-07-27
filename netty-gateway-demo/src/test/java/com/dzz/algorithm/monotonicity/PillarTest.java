@@ -12,28 +12,28 @@ import java.util.Stack;
 public class PillarTest {
 
     /*
-     * ��һ�����ӣ��߶�Ϊ[6, 4, 5, 2, 4, 3, 9]
-     * �������ܹ��ɵ�������
+     * 有一排柱子，高度为[6, 4, 5, 2, 4, 3, 9]
+     * 求柱子能构成的最大矩阵
      *
-     * ˼·��
-     * ʹ�õ���ջ,����ջ�������ǿ����ҵ���ǰԪ�صĺ����һ�����ڻ���С������Ԫ�أ�
+     * 思路：
+     * 使用单调栈,单调栈的特性是可以找到当前元素的后面第一个大于或者小于他的元素，
      *
-     * ����������Ҫ֪����ߺ��ұߵı߽�
+     * 不过这里需要知道左边和右边的边界
      *
-     * ������������һ���򵥵ĵ���ջ
-     * ���ӣ�[6, 4, 5, 2, 4, 3, 9]����¼���������飺[0,0,0,0,0,0,0]
-     * ����һ�������ݼ��ĵ���ջ,�����Ԫ�������ջ��С����ջ����ջ������ȡ��ջ����Ԫ�أ�ֱ��ջ��Ԫ�رȷ����Ԫ�ش�
-     * ��ÿ��ջ��Ԫ��ȡ��ʱ����ʾ�����˱������Ԫ�ؼ����ջ�� ջ�����Ԫ�������ӵ�����
-     * �����һ��Ԫ��ʱ��ջΪ�գ�����ջ��
+     * 这里我们先求一个简单的单调栈
+     * 柱子：[6, 4, 5, 2, 4, 3, 9]，记录索引的数组：[0,0,0,0,0,0,0]
+     * 构建一个单调递减的单调栈,放入的元素如果比栈顶小才入栈，比栈顶大则取出栈顶的元素，直到栈顶元素比放入的元素大
+     * 【每次栈的元素取出时，表示遇到了比他大的元素加入的栈】 栈放入的元素是柱子的索引
+     * 放入第一个元素时，栈为空，放入栈顶
      *
      *
-     * ����Ӧ���õ�������ջ���ҵ������һ������С��Ԫ��
+     * 这里应该用单调递增栈，找到后面第一个比他小的元素
      * */
     @Test
     public void test() {
         int[] zuZhi = {6, 4, 5, 2, 4, 3, 9};
         Stack<Integer> stack = new Stack<>();
-        //��������ջ�±�
+        //单调递增栈下标
         int[] right = new int[zuZhi.length];
         int[] left = new int[zuZhi.length];
         for (int i = 0; i < zuZhi.length; i++) {
@@ -41,7 +41,7 @@ public class PillarTest {
                 right[stack.pop()] = i;
             }
             stack.push(i);
-            right[i] = -1;//-1��ʾ��û��������taС����
+            right[i] = -1;//-1表示暂没有遇到比ta小的数
         }
 
         stack = new Stack<>();
@@ -50,12 +50,12 @@ public class PillarTest {
                 left[stack.pop()] = i;
             }
             stack.push(i);
-            left[i] = -1;//-1��ʾ��û����������С����
+            left[i] = -1;//-1表示暂没有遇到比他小的数
         }
         System.out.println(Arrays.toString(left));
         System.out.println(Arrays.toString(right));
 
-        //�������ұ߽� ��������С
+        //根据左右边界 求出矩阵大小
         int max = 0;
         for (int i = 0; i < zuZhi.length; i++) {
             int l = left[i] == -1 ? 0 : left[i] + 1;
@@ -66,19 +66,19 @@ public class PillarTest {
     }
 
     /*
-     * �Ż�˼·
-     * ���Ǽ�����������ʱ���õ�����������ջ��
-     * �ֱ������ĳһ���߶����������ܹ����쵽����Զ���룬��ʵ�Ⲣû�б�Ҫ��
-     * ��Ϊ������һ��ջҲ����ͬʱ��������ߵı߽硣
-     * �ٸ����ӣ�[1, 3, 6, 7]����ǰԪ����5��������Ҫ��6��7��ջ��5��ջ��
-     * ����֪����5����߽���3������ϸ��һ�룬����7��˵������֪�����������ұ߽硣7����߽���6���ұ߽���5��
-     * Ҳ����˵����ջ����Ԫ�ض��ԣ�������߽���stack[top-1]���ұ߽��ǵ�ǰ��λ��i��������i - stack[top-1] - 1��
+     * 优化思路
+     * 我们计算矩形面积的时候用到了两个单调栈，
+     * 分别计算了某一个高度向左、向右能够延伸到的最远距离，其实这并没有必要。
+     * 因为我们用一个栈也可以同时计算出两边的边界。
+     * 举个例子：[1, 3, 6, 7]，当前元素是5。我们需要把6，7出栈，5入栈。
+     * 我们知道了5的左边界是3，但仔细想一想，对于7来说，我们知道了它的左右边界。7的左边界是6，右边界是5。
+     * 也就是说对于栈顶的元素而言，它的左边界是stack[top-1]，右边界是当前的位置i，宽就是i - stack[top-1] - 1。
      * */
     @Test
     public void test2() {
         int[] zuZhi = {6, 4, 5, 2, 4, 3, 9};
         Stack<Integer> stack = new Stack<>();
-        //��������ջ�±�
+        //单调递增栈下标
         int[] right = new int[zuZhi.length];
         int[] left = new int[zuZhi.length];
         for (int i = 0; i < zuZhi.length; i++) {
@@ -92,12 +92,12 @@ public class PillarTest {
             }
 
             stack.push(i);
-            right[i] = -1;//-1��ʾ��û��������taС����
+            right[i] = -1;//-1表示暂没有遇到比ta小的数
 
         }
 
 
-        //�������ұ߽� ��������С
+        //根据左右边界 求出矩阵大小
         int max = 0;
         for (int i = 0; i < zuZhi.length; i++) {
             int l = left[i] == -1 ? 0 : left[i] + 1;
@@ -108,10 +108,10 @@ public class PillarTest {
     }
 
     /*
-     * ����
-     * �����1��������
+     * 进阶
+     * 求包含1的最大矩阵
      *
-     * ��ÿһ�е�������ֱ��ͼ��������1��Ϊֱ��ͼ�����Ӹ߶�
+     * 让每一行递增构建直方图，连续的1即为直方图的柱子高度
      * */
     @Test
     public void testMax() {
@@ -129,9 +129,9 @@ public class PillarTest {
         Stack<Integer> stack = new Stack<>();
 
         for (int i = 0; i < n; i++) {
-            //ÿһ�е�ֱ��ͼ
+            //每一行的直方图
             for (int j = 0; j < m; j++) {
-                //Ԥ����
+                //预处理
                 if (i == 0) {
                     height[i][j] = arr[i][j];
                 } else {
@@ -141,7 +141,7 @@ public class PillarTest {
 
             int[] right = new int[m];
             int[] left = new int[m];
-            //ÿһ�е�������
+            //每一行的最大矩阵
             for (int j = 0; j < m; j++) {
                 while (!stack.isEmpty() && height[i][j] < height[i][stack.peek()]) {
                     right[stack.pop()] = j;
