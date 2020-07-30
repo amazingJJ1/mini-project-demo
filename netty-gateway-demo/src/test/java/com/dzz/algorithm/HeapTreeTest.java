@@ -9,7 +9,8 @@ import org.junit.Test;
 public class HeapTreeTest {
 
     private int[] arr = new int[]{10, 11, 13, 7, 30, 17, 36, 27, 4, 3, 8};
-    int[] heapArr = new int[arr.length + 1];
+    //在arr基础上构建堆，0号索引不方便计算，舍弃
+    private int[] heapArr = new int[arr.length + 1];
 
     /**
      * 生成堆有两种方式
@@ -18,7 +19,7 @@ public class HeapTreeTest {
      * <p>
      * 这里采用第二种方式来生成最小堆
      */
-    public void initMinHead() {
+    private void initMinHead() {
         System.arraycopy(arr, 0, heapArr, 1, arr.length);
         for (int i = arr.length / 2; i > 0; i--) {
             siftDownMin(i);
@@ -29,14 +30,12 @@ public class HeapTreeTest {
     }
 
     private void siftDownMin(int index) {
-        int temp, flag = 0;
-        while ((2 * index) < arr.length && flag == 0) {
+        //temp是最小节点的索引
+        int temp = 0;
+        while ((2 * index) < arr.length) {
             //左子节点
-            if (heapArr[index] > heapArr[2 * index]) {
-                temp = 2 * index;
-            } else {
-                temp = index;
-            }
+            temp = (heapArr[index] > heapArr[2 * index]) ? 2 * index : index;
+
             //右子节点
             if ((2 * index + 1) < heapArr.length && heapArr[temp] > heapArr[(2 * index) + 1]) {
                 temp = (2 * index) + 1;
@@ -48,15 +47,15 @@ public class HeapTreeTest {
                 index = temp;
             } else {
                 //父节点已经最小了
-                flag = 1;
+                break;
             }
         }
 
     }
 
     private void siftDownMax(int index, int heapLen) {
-        int temp, flag = 0;
-        while ((2 * index) <= heapLen && flag == 0) {
+        int temp = 0;
+        while ((2 * index) <= heapLen) {
             //左子节点
             if (heapArr[index] < heapArr[2 * index]) {
                 temp = 2 * index;
@@ -74,7 +73,7 @@ public class HeapTreeTest {
                 index = temp;
             } else {
                 //父节点已经最小了
-                flag = 1;
+                break;
             }
         }
 
@@ -110,6 +109,7 @@ public class HeapTreeTest {
     public void headSort() {
         initMaxHeap();
         int n = arr.length;
+        //每次最大值交换到叶子节点，第二大的就可以上浮，依次交换则可以得到小-大的数组
         while (n > 1) {
             swap(1, n);
             n--;
