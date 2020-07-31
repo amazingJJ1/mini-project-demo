@@ -8,7 +8,7 @@ import org.junit.Test;
  */
 public class QuickSortTest {
 
-    private int[] arr = new int[]{10, 11, 13, 8, 30, 17, 36, 27, 4, 3, 8};
+    private int[] arr = new int[]{4, 6, 7, 1, 2, 3, 9, 11, 13};
 
     private void quickSort(int left, int right) {
         if (left > right) return;
