@@ -31,10 +31,12 @@ import org.junit.Test;
  * 2.类似dijkstra处理 prim算法
  * 因为最终会包含所有的顶点，开始先随机选中一个顶点a，然后选择第二个离他最近的顶点，即求a顶点的最小出边，选第三个顶点时是选离1，2个顶点最近的顶点，
  * 即1，2顶点最短的出边，依次构建完所有顶点
+ * 优点，算法较为简洁
+ * 缺点，相比并查集的算法，复杂度略高，为O(n^2)
  */
 public class TreeGraphTest {
 
-    int m = 6;//顶点数
+    int n = 6;//顶点数
     int[] u = {5, 2, 4, 1, 1, 4, 3, 2, 3};//边的左顶点
     int[] v = {6, 3, 5, 2, 3, 6, 4, 4, 5};//边的右顶点
     int[] w = {4, 6, 7, 1, 2, 3, 9, 11, 13};//边的权重
@@ -55,13 +57,13 @@ public class TreeGraphTest {
     public void testAndCheckSet() {
         //快排根据边的权重从小到大排序
         quickSort(0, w.length - 1);
-        //加入最下权重边，并查集判断关联关系
+        //加入最小权重边，并查集判断关联关系
         int num = 0;
         for (int i = 0; i < w.length; i++) {//枚举每一条边
             if (andCheckSet(i)) continue;
             num++;
             System.out.println(String.format("加入的边是 %d %d %d", u[i], v[i], w[i]));
-            if (num == m - 1) break;
+            if (num == n - 1) break;
         }
 
     }
@@ -124,10 +126,112 @@ public class TreeGraphTest {
     }
 
 
-    //prim算法 类似dijkstra处理
+    /*
+     * prim算法
+     * 未用dijkstra优化，复杂度O(n^3)
+     * */
     @Test
     public void testPrim() {
+        int[] book = new int[n + 1];//标记已加入的顶点
 
+        int INF = 999;//标记的不可达值
+        //图存储,先初始化顶点
+        int[][] map = new int[n + 1][n + 1];
+        for (int i = 1; i < n + 1; i++) {
+            for (int j = 1; j < n + 1; j++) {
+                if (i == j)
+                    map[i][j] = 0;
+                else
+                    map[i][j] = INF;
+            }
+
+        }
+        //遍历边，初始化图
+        for (int i = 0; i < u.length; i++) {
+            map[u[i]][v[i]] = w[i];
+            map[v[i]][u[i]] = w[i];
+        }
+
+        book[1] = 1;
+        int num = 1;
+
+        while (num < n) {
+            int min = INF;
+            int minI = 0;
+            int minJ = 0;
+            for (int i = 1; i <= n; i++) { //已存入的顶点
+                if (book[i] == 1) {//找出离他最近的边，且边的顶点未加入book
+                    for (int j = 1; j < map[i].length; j++) {
+                        if (map[i][j] != 0 && map[i][j] != INF && book[j] != 1) {
+                            if (map[i][j] < min) {
+                                min = map[i][j];
+                                minI = i;
+                                minJ = j;
+                            }
+                        }
+                    }
+                }
+            }
+            System.out.println(String.format("依次加入的边是 %d %d %d", minI, minJ, map[minI][minJ]));
+            book[minJ] = 1;
+            num++;
+        }
     }
+
+    /*
+     * dijkstra优化prim算法
+     * 复杂度0(n^2)
+     * */
+    @Test
+    public void testPrim2() {
+        int[] book = new int[n + 1];//标记已加入的顶点
+        int[] minJ = new int[n + 1];//记录缩短的边
+        for (int i = 0; i < minJ.length; i++) {
+            minJ[i] = 1;
+        }
+
+        int INF = 999;//标记的不可达值
+        //图存储,先初始化顶点
+        int[][] map = new int[n + 1][n + 1];
+        for (int i = 1; i < n + 1; i++) {
+            for (int j = 1; j < n + 1; j++) {
+                if (i == j)
+                    map[i][j] = 0;
+                else
+                    map[i][j] = INF;
+            }
+        }
+        //遍历边，初始化图
+        for (int i = 0; i < u.length; i++) {
+            map[u[i]][v[i]] = w[i];
+            map[v[i]][u[i]] = w[i];
+        }
+        book[1] = 1;
+        int num = 1;
+        int[] dis = map[1];
+
+        while (num < n) {
+            int min = INF;
+            int minI = 0;
+            for (int i = 1; i <= n; i++) {//遍历book数组
+                if (book[i] == 0 && dis[i] < min) {//找到离存入点最近的点
+                    min = dis[i];
+                    minI = i;
+                }
+            }
+            System.out.println(String.format("依次加入的顶点是 %d,加入的边是 %d %d %d", minI, minJ[minI], minI, map[minI][minJ[minI]]));//2 3 4 6 5
+            book[minI] = 1;
+            num++;
+            //用新加入的顶点缩短未加入点的距离
+            for (int i = 0; i <= n; i++) {
+                if (book[i] == 0 && dis[i] > map[minI][i]) {
+                    dis[i] = map[minI][i];
+                    minJ[i] = minI;//记录优化用的顶点，相当于记录边
+                }
+            }
+        }
+    }
+
+
 
 }
