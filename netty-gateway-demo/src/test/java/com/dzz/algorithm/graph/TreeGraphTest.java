@@ -104,6 +104,7 @@ public class TreeGraphTest {
 
     //判断加入的第i条边是否有公共父节点,
     // 注意：这里和常规并查集不一样的地方是父节点的值默认设置最小的，防止无向图的父节点判断错误
+    //比如 1-3 1-2 父节点是1， 3-1，2-1父节点也是1
     private boolean andCheckSet(int i) {
         int xf = getF(u[i]);
         int yf = getF(v[i]);
@@ -231,7 +232,6 @@ public class TreeGraphTest {
             }
         }
     }
-
 
 
 }
