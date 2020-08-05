@@ -61,6 +61,13 @@ import java.util.Arrays;
  * 所以有最小路径覆盖=原图的结点数-新图的最大匹配数。
  * <p>
  * 因为路径之间不能有公共点，所以加的边之间也不能有公共点，这就是匹配的定义。
+ * <p>
+ * <p>
+ * <p>
+ * 如何判断一个图是二分图
+ * -、如果是联通图
+ * 随机选用一个点作为根节点，进行bfs遍历,按树阶染色，
+ * 比如第一阶黑色，第二阶白色，如果最后黑色节点数==白色节点数，则是二分图，否则不是
  */
 public class BipartiteGraphTest {
 
@@ -73,45 +80,82 @@ public class BipartiteGraphTest {
      * 2 3 1
      * 3 1 1
      * */
-    int[][] map = {
+    private int[][] map = {
             {0, 0, 0, 0},
             {0, 1, 1, 0},
             {0, 0, 1, 1},
             {0, 1, 0, 0}
     };
 
-    int[] match = new int[4];
-    int[] book = new int[4];//标记已经访问过
+    private int[] x = new int[4]; //x匹配y的记录
+    private int[] y = new int[4]; //y匹配x的记录
+    private int[] book = new int[4];//标记已经访问过
 
-    int matchNum = 0;
+    private int matchNum = 0;
+
+    private boolean dfs(int left) {
+        for (int right = 1; right < map.length; right++) {
+            if (book[right] == 1) continue;
+            if (map[left][right] == 1) {
+                if (y[right] == 0) {//right没有匹配
+                    x[left] = right;
+                    y[right] = left;
+                    return true;
+                } else if (y[right] > 0) {//叫他尝试匹配别的
+                    book[right] = 1;
+                    if (dfs(y[right])) {
+                        x[left] = right;
+                        y[right] = left;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
 
     @Test
     public void test() {
         for (int i = 1; i < map.length; i++) {
-            for (int j = 1; j < map.length; j++) {
-//                book[j] = 0;//清空上次搜索标记
-                if (map[i][j] == 1 && dfs(i))
-                    matchNum++;
+            if (dfs(i)) {
+                matchNum++;
+                book = new int[4];//清空标记
             }
         }
         System.out.println(matchNum);
-        System.out.println(Arrays.toString(match));
+        System.out.println(Arrays.toString(x));
+        System.out.println(Arrays.toString(y));
     }
 
-    private boolean dfs(int left) {
+
+    private boolean dfs2(int left) {
         for (int right = 1; right < map.length; right++) {
-            if (book[right] == 0 && map[left][right] == 1) {
-                book[right] = 1;//标记右边的点i访问过了
-                //没有匹配或者找到新的配对
-                if (match[right] == 0 || dfs(match[right])) {
-                    match[left] = right;
-                    match[right] = left;
+            if (book[right] == 1) continue;
+            if (map[left][right] == 1) {
+                book[right] = 1; //先尝试占用，占用失败清掉
+                //1.right没有匹配 2.right已经匹配，尝试匹配其他的成功
+                if (y[right] == 0 || (y[right] > 0 && dfs2(y[right]))) {
+                    x[left] = right;
+                    y[right] = left;
                     return true;
                 }
-                book[right] = 0;//匹配失败则清除标记
+                book[right] = 0;
             }
         }
         return false;
+    }
+
+    @Test
+    public void test2() {
+        for (int i = 1; i < map.length; i++) {
+            if (dfs2(i)) {
+                matchNum++;
+                book = new int[4];//清空标记
+            }
+        }
+        System.out.println(matchNum);
+        System.out.println(Arrays.toString(x));
+        System.out.println(Arrays.toString(y));
     }
 }
 
