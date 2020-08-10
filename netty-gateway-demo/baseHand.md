@@ -1,0 +1,23 @@
+好像以前搞acm的时候，能不看模板敲出来的有：
+二分查找
+并查集
+bit
+kmp
+dij
+tarjan
+mst（手写heap）
+spfa线段树
+ac自动机
+伸展树
+sb树
+圆交
+圆并
+半平面交
+isap
+mcmf
+manacher
+模拟退火km和hk算法
+稳定婚姻算法
+dancing link
+后缀数组
+其实上面也没多少代码,理解了就记住了。
