@@ -99,6 +99,26 @@ import org.junit.Test;
 //     红N   黑1                             黑2  黑3  黑1  U黑                     黑2  黑3  黑1  U黑
 //    /  \
 // 黑2  黑3
+/*
+ *case6:
+ * N,P为红，U黑，N为P的左孩子，P为G的右孩子
+ * N,P先右旋，当前节点设置为P，然后N，P再左旋并且变色
+ *
+ * */
+
+/*
+ * 删除分析
+ * 红黑树删除操作的复杂度在于删除节点的颜色，当删除的节点是红色时，直接拿其孩子节点补空位即可。
+ * 因为删除红色节点，性质5（从任一节点到其每个叶子的所有简单路径都包含相同数目的黑色节点）仍能够被满足。
+ * 当删除的节点是黑色时，那么所有经过该节点的路径上的黑节点数量少了一个，破坏了性质5。
+ * 如果该节点的孩子为红色，直接拿孩子节点替换被删除的节点，并将孩子节点染成黑色，即可恢复性质5。
+ * 但如果孩子节点为黑色，处理起来就要复杂的多。分为6种情况，下面会展开说明。
+ *
+ * case1 删除的是根节点
+ * 如果左右子节点都是null最好办，根节点直接干掉，设置为null,如果不是，那么拿节点的前驱（左子树最大的节点）或后驱节点（右子树的）【且不是黑色节点】替换根节点
+ *
+ *
+ * */
 
 public class RBTree {
 
@@ -167,6 +187,14 @@ public class RBTree {
 
     private Node root;
 
+    public void remove(Integer t) {
+
+    }
+
+    private void remove(Node node) {
+
+    }
+
     public void add(Integer t) {
         if (root == null) {
             root = new Node().setValue(t).setRed(false).setRoot(true);
@@ -201,39 +229,61 @@ public class RBTree {
         return node;
     }
 
-    public void add(Node node) {
+    private void add(Node node) {
         Node parent = node.getParent();
         if (parent.isRoot() || !parent.isRed()) return;
         Node gParent = parent.getParent();
         Node uncle = gParent.getRight() == parent ? gParent.getLeft() : gParent.getRight();
 
         //case3 P红U红  设置为P,U黑
-        if (uncle != null && uncle.isRed()) {
+        if (parent.isRed() && uncle != null && uncle.isRed()) {
+            uncle.setRed(false);
+            parent.setRed(false);
+            gParent.setRed(true);
             if (gParent.isRoot()) {
-                if (node == parent.getLeft() && parent == gParent.getLeft())
-                    rightRotate(parent, gParent);
-                if (node == parent.getRight() && parent == gParent.getRight())
-                    leftRotate(gParent, parent);
-                parent.setRoot(true);
-                gParent.setRoot(false);
+                gParent.setRed(false);
+                return;
             } else {
-                uncle.setRed(false);
-                parent.setRed(false);
-                gParent.setRed(true);
                 add(gParent);
+                return;
             }
         }
 
-        //case4&5 P红U黑
-        if (uncle == null || !uncle.isRed()) {
+        //case4&5  6&7、P红U黑
+        if (parent.isRed() && (uncle == null || !uncle.isRed())) {
             if (node == parent.right && parent == gParent.left) {
                 leftRotate(parent, node);
-                add(parent);//当前节点替换为父节点
+                add(parent);//当前节点指向父节点
+                return;
             }
             if (node == parent.left && parent == gParent.left) {
-                rightRotate(parent,gParent);
-                parent.setRed(false);
+                rightRotate(parent, gParent);
+                parent.setRed(false);//PG换色
                 gParent.setRed(true);
+                if (gParent.isRoot()) {
+                    gParent.setRoot(false);
+                    parent.setRoot(true);
+                    root = parent;
+                }
+                return;
+            }
+
+            if (node == parent.left && parent == gParent.right) {
+                rightRotate(node, parent);
+                add(parent);
+                return;
+            }
+
+            if (node == parent.right && parent == gParent.right) {
+                leftRotate(gParent, parent);//PG换色
+                boolean temp = gParent.red;
+                gParent.setRed(parent.red);
+                parent.setRed(temp);
+                if (gParent.isRoot()) {
+                    gParent.setRoot(false);
+                    parent.setRoot(true);
+                    root = parent;
+                }
             }
         }
     }
@@ -241,9 +291,15 @@ public class RBTree {
     //右旋
     private void rightRotate(Node left, Node right) {
         left.setParent(right.parent);
+        if (right.parent != null) {
+            if (right.parent.getLeft() == right)
+                right.parent.setLeft(left);
+            else
+                right.parent.setRight(left);
+        }
         right.setParent(left);
-        left.setRight(right);
         right.setLeft(left.getRight());
+        left.setRight(right);
     }
 
 
@@ -251,14 +307,27 @@ public class RBTree {
     private void leftRotate(Node left, Node right) {
         left.setRight(right.getLeft());
         right.setParent(left.parent);
+        if (left.parent != null) {
+            if (left.parent.getLeft() == left)
+                left.parent.setLeft(right);
+            else
+                left.parent.setRight(right);
+        }
         left.setParent(right);
         right.setLeft(left);
     }
 
 
     //10 40 30 60 90 70 20 50 80
+    //                      30黑
+    //                   /       \
+    //                10黑       60红
+    //                 \        /   \
+    //                20红    40黑   70黑
+    //                          \       \
+    //                         50红     80红
     @Test
-    public void testRBTreeAdd(){
+    public void testRBTreeAdd() {
         RBTree rbTree = new RBTree();
         rbTree.add(10);
         rbTree.add(40);
