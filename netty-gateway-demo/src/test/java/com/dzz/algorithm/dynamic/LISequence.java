@@ -15,15 +15,15 @@ import java.util.Arrays;
  */
 public class LISequence {
 
-    private int[] arr = new int[]{1, 5, 2, 6, 9, 10, 3, 15};
+    private int[] arr = {1, 5, 2, 6, 9, 10, 3, 15};
 
     @Test
     public void test() {
         int i = lengthOfLIS(arr);
         System.out.println(i);
 
-        int dp = dp(new int[]{0, 8, 4, 12, 2});
-        System.out.println(dp);
+//        int dp = dp(new int[]{0, 8, 4, 12, 2});
+        System.out.println(dp(arr));
     }
 
 
@@ -41,6 +41,7 @@ public class LISequence {
         if (nums[curpos] > prev) {
             taken = 1 + lengthofLIS(nums, nums[curpos], curpos + 1);
         }
+        //不包含当前值的序列
         int nottaken = lengthofLIS(nums, prev, curpos + 1);
         return Math.max(taken, nottaken);
     }
@@ -59,7 +60,7 @@ public class LISequence {
         int[] temp = new int[arr.length];
         int len = 0;
         for (int i = 0; i < arr.length; i++) {
-            if (len == 0 || arr[i] > temp[len-1]) {
+            if (len == 0 || arr[i] > temp[len - 1]) {
                 temp[len] = arr[i];
                 len++;
             } else {
@@ -73,4 +74,5 @@ public class LISequence {
         }
         return len;
     }
+
 }

@@ -14,7 +14,7 @@ public class PointTest {
      * <p>
      * 分解成求每个柱子可以接的雨水量
      * <p>
-     * 双数组求作用最高的柱子
+     * 双数组求左右最高的柱子
      */
     @Test
     public void collectRain() {
