@@ -49,18 +49,36 @@ Raft与Multi-Paxos有着千丝万缕的关系，下面总结了Raft与Multi-Paxo
 
 Raft与Multi-Paxos中相似的概念：
 
-![](raft_paxos1.png)
+|raft|multi-paxos|
+|----|----|
+|Leader|proposer|
+|Term|proposer ID|
+|Log Entry|Proposal|
+|Log Index|Instance ID|
+|Leader选举|Prepare阶段|
+|日志复制|Accept阶段|
 
 Raft的Leader即Multi-Paxos的Proposer。
+
 Raft的Term与Multi-Paxos的Proposal ID本质上是同一个东西。
+
 Raft的Log Entry即Multi-Paxos的Proposal。
+
 Raft的Log Index即Multi-Paxos的Instance ID。
+
 Raft的Leader选举跟Multi-Paxos的Prepare阶段本质上是相同的。
+
 Raft的日志复制即Multi-Paxos的Accept阶段。
+
 Raft与Multi-Paxos的不同：
 
-![](raft_paxos2.png)
 
+||raft|multi-paxos|
+|----|----|----|
+|领导者|强Leader|弱Leader|
+|领导者选举权|具有最新已提交日志的副本|任意副本|
+|日志复制|保证连续|允许空洞|
+|日志提交|推进commit index|异步commit 消息|
 Raft假设系统在任意时刻最多只有一个Leader，提议只能由Leader发出（强Leader），否则会影响正确性；而Multi-Paxos虽然也选举Leader，但只是为了提高效率，并不限制提议只能由Leader发出（弱Leader）。
 
 强Leader在工程中一般使用Leader Lease和Leader Stickiness来保证：
