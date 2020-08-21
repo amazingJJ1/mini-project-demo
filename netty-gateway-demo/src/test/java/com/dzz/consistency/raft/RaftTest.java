@@ -47,13 +47,13 @@ package com.dzz.consistency.raft;
  * >  验证成功后写入本地Log并返回Leader成功；
  * 3、Leader接收到多数派Follower的回复以后，将当前Log Commit（如写入状态机）。然后回复Client
  * 4、 后续的AppendEntry及HeartBeat都会携带leader的Commit位置，Follower会提交该位置之前的所有Log Entry，随后所有的节点都拥有相同的数据
- * 脑裂问题：
- * 若集群中出现网络异常，导致集群被分割，将出现多个Leader
- * 当集群再次连通时，follow将只听从最新任期Leader的指挥，旧Leader将退化为Follower，
- * 任期小的Leader 需要听从任期大的Leader的指挥，此时集群重新达到一致性状态
  * 上面的提案执行过程保证了两个事情：
  * 1、Follower以与Leader节点相同的顺序依次执行每个成功提案;
  * 2、每个成功提交的提案有足够多的成功副本，来保证后续的访问一致
+ * 【脑裂问题】：
+ * 若集群中出现网络异常，导致集群被分割，将出现多个Leader
+ * 当集群再次连通时，follow将只听从最新任期Leader的指挥，旧Leader将退化为Follower，
+ * 任期小的Leader 需要听从任期大的Leader的指挥，此时集群重新达到一致性状态
  *
  * 安全性
  * Leader Commit过的提案会向用户返回成功，因此Raft集群需要保证这些提案（日志）永远存在。
