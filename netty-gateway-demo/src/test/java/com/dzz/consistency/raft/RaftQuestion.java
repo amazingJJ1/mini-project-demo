@@ -81,6 +81,13 @@ package com.dzz.consistency.raft;
  * <p>
  * 问题四、raft中，如果leader已经将日志发送给一半以上的节点后，没回复客户端就宕机了，该如何处理？
  * raft 会重新选leader 完成数据的提交，客户端会重试，raft要求RPC实现幂等性，会做内部去重机制
+ *
+ * 我们的目标是让raft实现可线性化的语义（每个操作似乎即刻执行一次，在它的调用和响应之间的某个时间点）。
+ * 然而，如前所示，raft可以执行一条命令多次：
+ * 比如，如果leader在提交log entry之后而在响应客户端之前崩溃了，则客户端将使用新的领导者重试命令，导致它第二次执行。
+ * 解决方案是客户端为每个命令分配唯一的序列号。 然后，状态机跟踪为每个客户端处理的最新序列号以及相关的响应。
+ * 如果它收到一个序列号已经执行的命令，它会立即响应，而不会重新执行请求。
+ *
  */
 public class RaftQuestion {
 
@@ -102,6 +109,8 @@ public class RaftQuestion {
     * >   ②、Candidate的日志足够新（Term更大，或者Term相同raft index更大）。
     * 因为初始化的时候其他节点的term都是0，也没有commit index。其他节点回复candidate的请求，会把票投给他。candidate1收到超过半数的同意，
     * 于是将term+1，开始发起新一轮选举投票请求[如果没有收到半数的同意，则将自己退化成follower,重置计时器等待]。
+    *
+    *
     * 选举投票过程：
     * 2、如果candidate1获得多数节点的票数，则将自己角色变成leader，并进行周期性的心跳广播，其他节点收到心跳后将自己的角色置为follower。
     * >  但是如果candidate1和candidate2获得相同的票数（瓜分了票池），即两个candidate都没有超过半数投票，那么他们继续等待自己的计数器超时，
@@ -121,6 +130,7 @@ public class RaftQuestion {
     * >     ②如果在 Candidate 等待 Servers 的投票结果期间收到了其他拥有更高 Term 的 Server 发来的心跳；
     * >   同时，当一个 Leader 发现有 Term 更高的 Leader 时也会退回到 Follower 状态。
     *
+    *
     * 3、数据写入过程
     * >数据写入都是通过leader进行写入
     * >     ①Leader负责接收来自Client的提案请求，写入本地log,之后并行地向所有Follower通过AppendEntry请求发送该Log Entry。
@@ -129,13 +139,14 @@ public class RaftQuestion {
     * >        如果最后一条日志和自己的不匹配就回绝Leader。Leader被打击后，就会开始回退一步，携带最后两条日志，
     * >        重新向拒绝自己的Follower发送AppendEntries消息。如果Follower发现消息中两条日志的第一条还是和自己的不匹配，
     * >        那就继续拒绝，然后Leader被打击后继续后退重试。如果匹配的话，那么就把消息中的日志项写入本地的日志.
-    * >        于是日志同步就成功了，一致性就实现了。（实际实现应该只有两次网络请求，直接到日志匹配的位置复制日志）
+    * >        于是日志同步就成功了，一致性就实现了。【实际实现应该只有两次网络请求，直接到日志匹配的位置复制日志】
     * >     ③Leader接收到多数派Follower的回复以后，将当前Log Commit（如写入状态机）。然后回复Client成功
     * >     ④Leader后续的AppendEntry及HeartBeat都会携带leader的Commit位置，Follower会提交该位置之前的所有Log Entry，
     * >       随后所有的节点都拥有相同的数据。
     * >数据写入的过程保证了两件事
     * >>>1、Follower以与Leader节点相同的顺序依次执行每个成功提案;
     * >>>2、每个成功提交的提案有足够多的成功副本，来保证后续的访问一致
+    *
     * > 数据写入的安全性
     *
     *
