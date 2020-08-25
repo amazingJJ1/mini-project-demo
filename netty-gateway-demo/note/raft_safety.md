@@ -38,15 +38,19 @@ Leader 在备份当前 Term 的日志记录时，在成功备份至集群大多�
 由此，我们便实现了前面提及的 Leader Completeness 性质。文中 5.4.3 节有完整的证明过程，
 感兴趣的读者可自行查阅。
 
-# 验证复盘
+## 验证复盘
 按照上述raft限制的性质：
 1. Leader只能对自己本Term的提案采用统计大多数的方式Commit
 2. Commit的Log之前的所有Log都顺序Commit
 
 进行上面crash复盘，验证安全性。
 
-1. 在时间点 (a) 时，S1 是 Leader，并把 (TermID=2, index=2) 的日志记录备份到了 S2 上。
+1. 在时间点 (a) 时，S1 是 Leader，并把 (TermID=2, index=2,v=2) 的日志记录备份到了 S2 上。因为2没有被复制给大多数，暂时算无效旧数据
 
-2. 到了时间点 (b) 时，S1 崩溃，S5 收到 S3、S4、S5 的选票，被选为 Leader，
-    并从客户端处接收到日志记录 (TermID=3, index=2)。
+2. 到了时间点 (b) 时，S1 崩溃，S5 收到 S3、S4、S5 的选票，被选为 Leader。
+    并从客户端处接收到日志记录 (TermID=3, index=2，v=3)。
+    
+3. 在时间点 (c) 时，S5 崩溃，S1 重启，这个时候没有leader,超时选举前s2,s3,S4（TermID=3）而S1（TermId=2),无法通过preVote,无法选主，
+    只有S2(TermID=3,index=2)的任期最大且有最多的log，被选为新leader，选为新leader，先发送空白请求
+    ，让旧term的数据提交且同步到其他follower节点。
 
