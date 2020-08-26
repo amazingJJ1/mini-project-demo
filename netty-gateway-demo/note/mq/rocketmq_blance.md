@@ -126,7 +126,28 @@ B的流量会瞬间出现峰值，给服务带来抖动，因此**超时容忍�
      
      
 ## consumer group
-Rocketmq中有ConsumerGroup的概念。在集群模式下，多台服务器配置相同的ConsumerGroup，能够使得每次只有一台服务器消费消息（注意，但不保证只消费一次，存在网络抖动的情况）
+Rocketmq中有ConsumerGroup的概念。在集群模式下，多台服务器配置相同的ConsumerGroup，
+能够使得每次只有一台服务器消费消息（注意，但不保证只消费一次，存在网络抖动的情况）
+
+一个Consumer Group中的各个Consumer实例分摊去消费消息，即一条消息只会投递到一个Consumer Group下面的一个实例。
+实际上，每个Consumer是平均分摊Message Queue的去做拉取消费。
+
+例如某个Topic有3条Q，其中一个Consumer Group 有 3 个实例（可能是 3 个进程，或者 3 台机器），那么每个实例只消费其中的1条Q。
+
+
+Consumer Group标识一类Consumer的集合名称，这类Consumer通常消费一类消息，且消费逻辑一致。
+同一个Consumer Group下的各个实例将共同消费topic的消息，起到负载均衡的作用。
+消费进度以Consumer Group为粒度管理，不同Consumer Group之间消费进度彼此不受影响，
+即消息A被Consumer Group1消费过，也会再给Consumer Group2消费。
+
+注： RocketMQ要求同一个Consumer Group的消费者必须要拥有相同的注册信息，即必须要听一样的topic(并且tag也一样)
+
+#### 广播消费
+消息将对一个Consumer Group下的各个Consumer实例都投递一遍。
+即即使这些 Consumer 属于同一个Consumer Group，消息也会被Consumer Group 中的每个Consumer都消费一次。
+
+实际上，是一个消费组下的每个消费者实例都获取到了topic下面的每个Message Queue去拉取消费。
+所以消息会投递到每个消费者实例。这种模式下，消费进度会存储持久化到实例本地。
 
 
 ### 顺序消费

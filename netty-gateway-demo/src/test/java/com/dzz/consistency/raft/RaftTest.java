@@ -55,6 +55,13 @@ package com.dzz.consistency.raft;
  * 当集群再次连通时，follow将只听从最新任期Leader的指挥，旧Leader将退化为Follower，
  * 任期小的Leader 需要听从任期大的Leader的指挥，此时集群重新达到一致性状态
  *
+ * 另外一种脑裂解决方案：
+ * leader lease方式
+ * 在集群选取两个leader,一个data leader,一个region leader。 region leader会持有一个lease
+ * region转发所有的读写请求 给leader，转发成功则续期。
+ *
+ * lease 方式会牺牲一段时间的可用性
+ *
  * 安全性
  * Leader Commit过的提案会向用户返回成功，因此Raft集群需要保证这些提案（日志）永远存在。
  *1、Leader Crash后，新的节点成为Leader，为了不让数据丢失，我们希望新Leader包含所有已经Commit的Entry。

@@ -133,6 +133,7 @@ public class RaftQuestion {
     *
     * 3、数据写入过程
     * >数据写入都是通过leader进行写入
+    * >     节点当选leader时，会发送一条空白log entry请求，让以前任期的commit可以被提交
     * >     ①Leader负责接收来自Client的提案请求，写入本地log,之后并行地向所有Follower通过AppendEntry请求发送该Log Entry。
     * >        这些内容将包含在Leader发出的下一个心跳中。
     * >     ②Follower接收到心跳以后，Follower对收到的Entry进行验证，包括验证其之前的一条Log Entry项是不是和Leader相同，
@@ -148,7 +149,7 @@ public class RaftQuestion {
     * >>>2、每个成功提交的提案有足够多的成功副本，来保证后续的访问一致
     *
     * > 数据写入的安全性
-    *
+    * 在raft_safety一文中有分析
     *
     *
     *
