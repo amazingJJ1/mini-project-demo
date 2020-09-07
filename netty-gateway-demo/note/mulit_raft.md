@@ -125,4 +125,29 @@ Raft中有一个RPC用于发送Snapshot数据，但是如果把所有的数据�
 PingCAP团队(健壮的Multi-Raft实现)
 @Ed Huang
  (私下咨询了很多问题)
+ 
+ 
+### tikv mulit-raft 
+比如一个简单的 case ：
+因为 pd 的路由表是存储在 etcd 上的，但是 region 的分裂是由 node 自行决定的 
+( node 才能第一时间知道自己的某个 region 大小是不是超过阈值)，
+这个 split 事件如果主动的从 node push 到 pd ，如果 pd 接收到这个事件，但是在持久化到 etcd 前宕机，
+新启动的 pd 并不知道这个 event 的存在，路由表的信息就可能错误。
+
+我们的做法是将 pd 设计成彻底无状态的，只有彻底无状态才能避免各种因为无法持久化状态引发的问题。
+
+每个 node 会定期的将自己机器上的 region 信息通过心跳发送给 pd, pd 通过各个 node 通过心跳传上来的 region 信息建立一个全局的路由表。
+这样即使 pd 挂掉，新的 pd 启动起来后，只需要等待几个心跳时间，就又可以拥有全局的路由信息，另外 etcd 可以作为缓存加速这一过程，
+也就是新的 pd 启动后，先从 etcd 上拉取一遍路由信息，然后等待几个心跳，就可以对外提供服务。
+
+但是这里有一个问题，细心的朋友也可能注意到了，如果集群出现局部分区，可能某些 node 的信息是错误的，
+比如一些 region 在分区之后重新发起了选举和分裂，但是被隔离的另外一批 node 还将老的信息通过心跳传递给 pd，
+可能对于某个 region 两个 node 都说自己是 leader 到底该信谁的？
+
+在这里，TiKV 使用了一个 epoch 的机制，用两个逻辑时钟来标记，一个是 raft 的 config change version，
+另一个是 region version，每次 config change 都会自增 config version，每次 region change（比如split、merge）
+都会更新 region version. pd 比较的 epoch 的策略是取这两个的最大值。
+
+1. 先比较 region version, 
+2. 如果 region version 相等则比较 config version 拥有更大 version 的节点，一定拥有更新的信息。
 
