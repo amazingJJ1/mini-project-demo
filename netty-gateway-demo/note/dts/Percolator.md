@@ -20,46 +20,112 @@ Percolator的做法是对数据**扩展出一个lock列**。
 因为BigTable底层是GFS，是多副本，假定其能保证对外承诺的SLA下的可靠性，真发生了丢数据的问题那就人工处理呗。。。
 
 ### percolator 数据结构
-基本上每行数据都有以下字段
-- key
-- data 
-- lock 锁标记 主行记录start_ts,副行记录start_ts和主行lock位置
-- write 当前key最新的版本号 主行记录commit_ts,副行记录commit_ts和start_ts
-- timestamp
+Percolator在每行数据上抽象了五个COLUMN，其中三个跟事务相关:lock,data,write
+
+1. lock column
+
+    事务产生的锁，未提交的事务会写本项，记录primary lock的位置。**事务成功提交后，该记录会被清理**。
+    
+    >记录内容格式：{key,start_ts} -> {primary_key,lock_type,...}
+    
+    - key: 数据的key​
+    - start_ts: 事务开始时间戳​
+    - primary_key: 事务primary引用
+    
+    在执行Percolate事务时，会从待修改的keys中选择一个(随机选择)作为 primary_key  ，其余的则作为 secondaries 
+    
+2. data column
+
+    存储实际用户数据
+    
+    > 数据格式为: {key,start_ts} -> {value} ​        
+     
+3. write column
+
+    已提交的数据信息，存储数据所对应的时间戳。
+    
+    > 数据格式 {key,commit_ts} -> {start_ts} ​                
+    
+    可根据key + start_ts在DATA COLUMN中找到数据value
+    
+ 关键在于write column，只有该列正确写入后，事务的修改才会真正被其他事务可见。
+ 读请求会首先在该column中寻找最新一次提交的start_timestamp，这决定了接下来从data column的哪个key读取最新数据。
+ 
+ 
+### Snapshop isolation
+Percolator 使用时间戳记维度实现数据的多版本化从而达到了snapshot isolation，优点是：
+- 对于读：读操作都能够从一个带时间戳的稳定快照获取
+- 对于写：较好地处理写-写冲突：若事务并发更新同一个记录，最多只有一个会提交成功
+
+以下面3个事务为例：
+
+0----------------------------------------------------->时间线
+
+事务1.......s1----------c1
+
+事务2...............s2------------c2
+
+事务3........................................s3---------c3
+
+
+快照隔离的事务均携带两个时间戳：
+- s:start_ts, 
+- c: commit_ts 。
+
+上面3个事务中：
+- start_ts2<commit_ts1,所以事务1的更新对于事务2不可见
+- 事务3可以看到事务1和事务2的所有信息
+- 事务1和事务2如果并发执行同一条数据，至少有一个失败
 
 ### 事务流程 
-每一个事务开始的时候都会去授时服务获取一个start_ts。
-- 写
+每一个事务开始的时候都会去授时服务（保证整体的时间是一致的）获取一个start_ts。
 
-    定义一个辅助函数：某行数据的**prewrite**,其实就是尝试Lock阶段
-    1. 检测write列和lock列与本次事务是否冲突，如果冲突则直接取消本次事务
-    2. 以start_ts对该行数据的lock列写入信息并写入data （相当于版本控制）
-        (非primary行进行prewrite,写入lock列的信息包括start_ts,还有primary lock的信息，比如位置)
-    
+- 写过程
+
+    定义一个辅助函数pre_write：某行数据的**pre_write**,其实就是**tyy lock阶段**
+    1. 冲突检查阶段，检测write列和lock列与本次事务是否冲突，如果冲突则直接取消本次事务
+        
+        >冲突检查：
+        >1. 从write 列中获取当前key的最新数据。
+            若其commit_ts大于等于start_ts，说明在该事务的更新过程中其他事务提交过对该key的修改，返回WriteConflict错误
+        >2. 检查key是否已被锁，如果是，返回KeyIsLock的错误
+                
+    2. 锁写入阶段，以start_ts对该行数据的lock列写入信息并写入data 
+        
+        >3. 向lock 列写入 {start_ts,key}->{primary_ref} 为当前key加锁。
+        >   若当前key是primary key，primary_ref标记为primary。
+        >   若当前key为secondary key，primary_ref则标记为指向primary的信息
+        >4. 向data列写入数据 ​{key,start_ts}->{value}
+       
     写主要分两个阶段：
-    1. 一个是客户端向Percolator SDK的事务对象写入mutations的阶段(Percolator SDK会缓存所有的mutations)（主要是update/delete）
+    1. 一个是客户端向Percolator SDK的事务对象写入mutations（主要是update/delete）的阶段(Percolator SDK会缓存所有的mutations)
     2. 一个是客户端本身的commit阶段(即调用Percolator SDK的事务对象的commit)。
     
     Percolator SDK中事务对象的commit分为两个阶段，即分布式事务的2PC：
-    1. 选出primary，对primary执行prewrite，失败返回
-    2. 对所有其他rows执行prewrite，失败返回
-    3. 获取一个commit_ts，转到步骤4
-    4. 检查是不是有自己时间戳加的锁，如果有对primary解锁(解锁指的是删除lock列)，
-        并在write列写入版本号commit_ts的标示(事务完成的标识)，内容指向start_ts的data，之后转到步骤5；
-        如果没有自己start_ts加的锁，事务失败。
-    5. 异步对其他rows执行4的处理   
+    1. 选出primary，对primary执行pre_write，失败返回
+    2. 对所有其他rows执行pre_write，失败返回
+    3. 客户端发送commit请求到primary key所在的存储节点，带上start_ts,并再获取一个commit_ts，转到步骤4
+    4. primary key所在的存储节点进行commit请求处理：
+        1. 检查lock的合法性。
+            - lock列start_ts小于write列的start_ts。不合法的lock，处理失败。
+            - 是不是有自己时间戳加的锁，如果有对primary解锁(解锁指的是删除lock列)，且write列有当前start_ts。
+                表示事务其实前面已经处理完成了，不需要重复处理，直接转到步骤5；
+            - 如果没有lock列没有start_ts加的锁，则事务失败。
+        2. write列写入{key,commit_ts}->{start_ts},标识事务完成（后面可以通过start_ts和key找到相应版本的data列的value）
+        3. 从lock列中删除key的锁记录以释放锁
+    5. primary commit如果成功则并行异步对其他rows执行4的处理
+   
+   在某些实现中（如TiDB），Commit阶段并非并行执行，而是先向primary节点发起commit请求，成功后即可响应客户端成功且后台异步地再向 [secondaries] 发起commit。 
     
-    
-- 读
+- 读过程
 
     读本身很简单，这里就简单说了。
     
-    先获取当前的时间戳start_ts，**如果时间戳之内的数据有锁，则等**，等到一定程度还不行就清理掉锁，执行读操作。
+    先获取当前的时间戳start_ts，**如果时间戳之内的数据有锁，则等一个超时时间，等到一定程度还不行就清理掉锁，执行读操作**。
     
-    这里不可以直接返回当前小于start_ts的最新版本数据，会造成幻读。
+    > 这里不可以直接返回当前小于start_ts的最新版本数据，会造成幻读。
     
-    因为如果当前读不等锁，再次读的话可能锁释放数据提交了，假如提交的时间戳小于读事务的开始时间戳，
-    就会读到比之前读到的版本数据大但是依然小于start_ts的新数据，这样就产生了不可重复读或者幻读。     
+    因为如果当前读不等锁，再次读的话可能锁释放数据提交了，这样就产生了不可重复读或者幻读。     
     
 
 - FAQ
@@ -85,6 +151,52 @@ Percolator的做法是对数据**扩展出一个lock列**。
     
     4. Percolator会有write skew问题吗？
     会。
+    
+    
+### 异常处理-清理锁
+
+在Prewrite阶段检测到锁冲突时会直接报错
+（读时遇到锁就等直到锁超时或者被锁的持有者清除，**写时遇到锁，直接回滚然后给客户端返回失败由客户端进行重试**）。
+
+锁清理是在读阶段执行。有以下几种情况时会产生垃圾锁：
+1. Prewrite阶段：部分节点执行失败，在成功节点上会遗留锁
+2. Commit阶段：Primary节点执行失败，事务提交失败，所有节点的锁都会成为垃圾锁
+3. Commit阶段：Primary节点执行成功，事务提交成功，但是在secondary节点上异步commit失败导致遗留的锁
+4. 客户端奔溃或者客户端与存储节点之间出现了网络分区造成无法通信
+
+对于前三种情况，客户端出错后会主动发起Rollback请求，要求存储节点执行事务Rollback流程。这里不做描述。
+对于最后一种情况，事务的发起者已经无法主动清理，只能依赖其他事务在发生锁冲突时来清理
+  
+
+#### Percolator采用延迟处理来释放锁
+事务A运行时发现与事务B发生了锁冲突，A必须有能力决定B是一个正在执行中的事务还是一个失败事务。
+
+因此，问题的关键在于
+> 如何正确地判断出lock column中的锁记录是属于当前正在处于活跃状态的事务还是其他失败事务遗留在系统中的垃圾记录 ？
+
+梳理事务的Commit流程一个关键的顺序是：
+事务Commit时：
+1. 检查其锁是否还存在；
+2. 先向write column写入记录再删除lock column中的记录。
+
+假如事务A在事务B的primary节点上执行，它在清理事务B的锁之前需要先进行锁判断：
+- 如果事务B的锁已经不存在（事实上，如果事务B的锁不存在，事务A也不会产生锁冲突了），那说明事务B已经成功提交。
+- 如果事务B的primary lock还存在，说明事务没有成功提交，此时清理B的primary lock。
+
+假如事务A在事务B的secondary 节点上执行，如果发现与事务B存在锁冲突，那么它需要判断到底是执行Roll Forward还是Roll Back动作。
+判断的方法是去Primary上查找primary lock是否存在：
+- 如果存在，说明事务B没有成功提交，需要执行Roll Back：清理lock column中的锁记录；
+- 如果不存在，说明事务已经被成功提交，此时执行Roll Forward：在该secondary节点上的write column写入内容并清理lock column中的锁记录。
+
+几种情形分析：
+1. 节点作为Primary在事务B的commit阶段写write column成功，但是删除lock column中的锁记录失败。
+如果是由于在写入过程中出现了进程退出，那么节点在重启后可以恢复出该事务并删除lock column
+
+2. 节点作为Primary在事务B的commit阶段写write column失败：意味事务B提交失败，那么事务A可以直接删除事务B在lock column中的锁记录
+
+3. 节点作为Secondary在事务B的commit阶段写write column成功，但是清理lock column锁失败，因为在事务commit的时候先向primary节点发起commit，
+因此，进入这里必然意味着primary节点上commit成功，即primary lock肯定已经不存在，因此，直接执行Roll Forward即可。 
+
     
 ###  tidb实现
 TiDB 的事务模型沿用了 Percolator 的事务模型。 总体的流程如下：
