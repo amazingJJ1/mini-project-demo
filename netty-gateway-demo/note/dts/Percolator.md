@@ -19,6 +19,21 @@ Percolator的做法是对数据**扩展出一个lock列**。
 另外还需要考虑一个问题，Percolator为什么不怕lock信息丢失呢？
 因为BigTable底层是GFS，是多副本，假定其能保证对外承诺的SLA下的可靠性，真发生了丢数据的问题那就人工处理呗。。。
 
+### percolator特点 
+- 事务: 跨行、跨表的、基于快照隔离的ACID事务 
+- 观察者(observers)：一种类似触发器的通知机制
+
+Percolator锁的管理必须满足以下条件： 
+- 能应对机器故障：若一个锁在两阶段提交时消失，系统可能将两个有冲突的事务都提交 
+- 高吞吐量：上千台机器会同时请求获取锁 
+- 低延时
+
+锁服务要实现： 
+- 多副本 ： survive failure 
+- distributed and balanced ： handle load 
+- 写入持久化存储系统
+
+
 ### percolator 数据结构
 Percolator在每行数据上抽象了五个COLUMN，其中三个跟事务相关:lock,data,write
 
@@ -50,6 +65,16 @@ Percolator在每行数据上抽象了五个COLUMN，其中三个跟事务相关:
     
  关键在于write column，只有该列正确写入后，事务的修改才会真正被其他事务可见。
  读请求会首先在该column中寻找最新一次提交的start_timestamp，这决定了接下来从data column的哪个key读取最新数据。
+ 
+4. Notify
+ 
+    notify列仅仅是一个hint值（可能是个bool值），表示是否需要触发通知。
+    
+5. Ack
+ 
+   ack列是一个简单的时间戳值，表示最近执行通知的观察者的开始时间。
+   
+   
  
  
 ### Snapshop isolation
@@ -312,3 +337,92 @@ PD采用了中心式的时钟解决方案，本质上还是混合逻辑时钟。
 PD通过引入etcd解决了单点问题，一旦Leader节点故障，会立刻选举新的Leader继续提供服务；
 而由于TSO服务只通过PD的Leader提供，所以可能会出现性能瓶颈，但是理论上PD每秒可以产生2.6亿个时间戳，
 并且经过了很多优化，从目前使用情况看，TSO并没有出现性能瓶颈。
+
+### tidb实现事务的其他优化点
+### gc
+GCTiDB 的事务的实现采用了MVCC机制，当新写入的数据覆盖旧的数据时，旧的数据不会被替换掉，而是与新写入的数据同时保留，并以时间戳来区分版本。
+ 
+ GC 的任务便是清理不再需要的旧数据。 一个 TiDB 集群中会有一个 TiDB 实例被选举为 GC leader，GC 的运行由 GC leader 来控制。
+ GC 会被定期触发。每次 GC 时，首先，TiDB 会计算一个称为 safe point 的时间戳，接下来 TiDB 会在保证 safe point之后的快照全部拥有正确数据的前提下，
+ 删除更早的过期数据。  
+ 
+ 每一轮 GC 分为以下三个步骤： 
+ - Resolve Locks：该阶段会对所有 Region 扫描 safe point 之前的锁，并清理这些锁 
+ - Delete Ranges：该阶段快速地删除由于 DROP TABLE/DROP INDEX 等操作产生的整区间的废弃数据 
+ - Do GC：该阶段每个 TiKV 节点将会各自扫描该节点上的数据，并对每一个 key 删除其不再需要的旧版本
+ 
+ ### Parallel Prewrite
+ tikv分批的并发进行prewrite，不会像percolator要先prewrite primary，再去prewrite secondary。 
+ 如果事务冲突，导致rollback，**在tikv的rollback实现中，其会留下rollback记录**，这样就会导致事务的prewrite失败，而不会产生副作用。
+
+#### Short Value
+对于percolator，先读取column:write 列，提取到key的start_ts，再去column:data列读取key数据本身。
+ 这样会造成两次读取，tidb的优化是，如果数据本身很小，那么就直接存储在colulmn:write中，只需读取一次即可。
+ 
+#### Point Read Without Timestamp
+为了减少一次RPC调用和减轻TSO压力，对于单点读，并不需要获取timestamp。
+因为单点读不存在跨行一致性问题(读取多行数据时，必须是同一个版本的数据)，所以直接可以读取最新的数据即可。    
+
+#### Calculated Commit Timestamp
+如果不通过TSO获取commit_ts，则会减少一次RPC交互从而降低事务的时延。   
+
+然而，为了实现SI的RR特性(repeatable read)，所以commit_ts需要确保其他事务多次读取的值是一样的。
+那么commit_ts就和其他事务的读取有相关性。
+
+下面公式可以计算出一个commit_ts
+
+> max{start_ts, max_read_ts_of_written_keys} < commit_ts <= now
+
+由于不可能记录每个key的最大的读取时间，但是可以记录每个region的最大读取时间，所以公式转换为：
+
+> commit_ts = max{start_ts, region_1_max_read_ts, region_2_max_read_ts, ...} + 1
+
+region_x_max_read_ts : 事务涉及到的key的region。
+
+#### Single Region 1PC
+对于事务只涉及到一个Region，那么其实是没有必要走2PC流程的。直接提交事务即可。
+
+
+### 乐观和悲观事务
+数据库有多种并发控制方法，这里只介绍以下两种：
+乐观并发控制（OCC）：在事务**提交阶段**检测冲突
+悲观并发控制（PCC）：在事务**执行阶段**检测冲突
+
+###  tidb 乐观事务
+冲突检测，检测底层数据是否存在写写冲突是一个很重的操作。
+ 
+具体而言，TiKV 在 Prewrite 阶段就需要读取数据进行检测。为了优化这一块性能，TiDB 集群会在内存里面进行一次冲突预检测。
+作为一个分布式系统，TiDB 在内存中的冲突检测主要在两个模块进行：
+- TiDB 层，如果在 TiDB 实例本身发现存在写写冲突，那么第一个写入发出去后，后面的写入就已经能清楚地知道自己冲突了，
+            没必要再往下层 TiKV 发送请求去检测冲突。
+- TiKV 层，主要发生在 Prewrite 阶段。因为 TiDB 集群是一个分布式系统，TiDB 实例本身无状态，实例之间无法感知到彼此的存在，
+            也就无法确认自己的写入与别的 TiDB 实例是否存在冲突，所以会在 TiKV 这一层检测具体的数据是否有冲突。
+            
+            
+### tidb悲观事务
+通过支持悲观事务，降低用户修改代码的难度甚至不用修改代码：
+
+在 v3.0.8 之前，TiDB 默认使用的乐观事务模式会导致事务提交时因为冲突而失败。为了保证事务的成功率，需要修改应用程序，加上重试的逻辑。
+**乐观事务模型在冲突严重的场景和重试代价大的场景无法满足用户需求**，支持悲观事务可以 弥补这方面的缺陷，拓展 TiDB 的应用场景。
+
+以发工资场景为例：对于一个用人单位来说，发工资的过程其实就是从企业账户给多个员工的个人账户转账的过程，一般来说都是批量操作，
+在一个大的转账事务中可能涉及到成千上万的更新，想象一下如果这个大事务执行的这段时间内，某个个人账户发生了消费（变更），
+如果这个大事务是乐观事务模型，提交的时候肯定要回滚，涉及上万个个人账户发生消费是大概率事件，如果不做任何处理，
+最坏的情况是这个大事务永远没办法执行，一直在重试和回滚（饥饿）。
+
+
+在 Percolator 乐观事务基础上实现，**在 Prewrite 之前增加了 Acquire Pessimistic Lock 阶段**用于避免 Prewrite 时发生冲突：
+
+- 每个 DML 都会加悲观锁，锁写到 TiKV 里，同样会通过 raft 同步。
+- 悲观事务在加悲观锁时检查各种约束，如 Write Conflict、key 唯一性约束等。
+- 悲观锁不包含数据，只有锁，只用于防止其他事务修改相同的 Key，不会阻塞读，
+    但 Prewrite 后会阻塞读（和 Percolator 相同，但有了大事务支持后将不会阻塞读）。
+- 提交时同 Percolator，悲观锁的存在保证了 Prewrite 不会发生 Write Conflict，保证了提交一定成功。
+
+悲观锁可能会导致死锁，需要 **分布式死锁检测**
+在 Waiter Manager 中等待锁的事务间可能发生死锁，而且可能发生在不同的机器上，TiDB 采用分布式死锁检测来解决死锁问题：
+
+- 在整个 TiKV 集群中，有一个死锁检测器 leader。
+- 当要等锁时，其他节点会发送检测死锁的请求给 leader。
+
+死锁检测器基于 Raft 实现了高可用，等锁事务也会定期发送死锁检测请求给死锁检测器的 leader，从而保证了即使之前 leader 宕机的情况下也能检测到死锁。
