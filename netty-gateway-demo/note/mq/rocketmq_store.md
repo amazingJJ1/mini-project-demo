@@ -2,13 +2,13 @@
 首先，rocket和kafka一样是基于文件存储的。消息是顺序写入，充分利用page cache,写入性能很高。
 但是这样对于topic来说，存储的消息数据可能是不连续的。
 
-这样需要对不对topic或者queue进行索引或者分区。这样就至少需要两个文件：
+这样需要对不同topic或者queue进行索引或者分区。这样就至少需要两个文件：
 一个文件存储真实数据，一个文件存储消息索引。
 
 于是rocket mq有以下文件：
 - **commitlog**: 真实消息记录目录
     
-    commitlog文件的存储地址：$HOME\store\commitlog${fileName}，每个文件的大小默认1G =102410241024。因为是
+    commitlog文件的存储地址：$HOME\store\commitlog\${fileName}，每个文件的大小默认1G =102410241024。因为是
     利用javaNio 的**MappedByteBuffer**来提高读写性能，减少io拷贝。而java的MappedByteBuffer默认映射限制是1G左右。
     CommitLog的文件名fileName，名字长度为20位，左边补0，剩余为起始偏移量。
     比如 00000000000000000000 代表了第一个文件，起始偏移量为 0， 文件大小为 1G=1073741824；

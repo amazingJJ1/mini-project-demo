@@ -87,16 +87,18 @@ producer往kafka中发送数据，不仅可以一次发送一条数据，还可�
 
 #### 问题思考
 1. Data Replication如何处理Replica恢复
+
     leader挂掉了，从它的follower中选举一个作为leader，并把挂掉的leader从ISR中移除，继续处理数据。
     一段时间后该leader重新启动了，它知道它之前的数据到哪里了，尝试获取它挂掉后leader处理的数据，获取完成后它就加入了ISR
 
 2. Data Replication如何处理Replica全部宕机
+
     1. 等待ISR中任一Replica恢复,并选它为Leader
        
-       等待时间较长,降低可用性
-       或ISR中的所有Replica都无法恢复或者数据丢失,则该Partition将永不可用
+       等待时间较长,降低可用性，或ISR中的所有Replica都无法恢复或者数据丢失,则该Partition将永不可用
        
-    2. 选择第一个恢复的Replica为新的Leader,无论它是否在ISR中   
+    2. 选择第一个恢复的Replica为新的Leader,无论它是否在ISR中 
+     
         并未包含所有已被之前Leader Commit过的消息,因此会造成数据丢失
         可用性较高
 ### rocket
