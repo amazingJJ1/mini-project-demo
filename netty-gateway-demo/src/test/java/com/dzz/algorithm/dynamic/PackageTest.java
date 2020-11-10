@@ -360,4 +360,88 @@ public class PackageTest {
 //        System.out.println(max);
         return max;
     }
+
+    /*
+     * 给定n个不同的正整数，整数k（k < = n）以及一个目标数字。
+     * 在这n个数里面找出K个数，使得这K个数的和等于目标数字，求问有多少种方案？
+     * 给出[1,2,3,4]，k=2， target=5，[1,4] and [2,3]是2个符合要求的方案
+     *
+     *
+     * 最开始参照了k数和Ⅱ用递归来做，结果只通过18%的数据就Time Limit Exceeded了。点开标签一看，要用动态规划……一口老血。
+     * 刚做过背包问题，背包问题中用背包容量作为动态数组一个维度，另一个维度是取0~i个物体，dp值是当前最大容量。
+     * 而这道题，目标数字相当于背包容量，要作为一个维度，但与背包问题不同的是，这道题是从前 i 个中取出若干个（j），
+     * 又多出一个维度，所以要用三维动态数组，dp值表示当前方案数，大爷的……
+     *
+     * 也就是说，dp【i】【j】【t】表示从前i个数中取出j个，这些数的和要等于t，有多少种方案。
+     * 状态转移方程：dp【i】【j】【t】=dp【i-1】【j】【t】+dp【i-1】【j-1】【t-A【i】】（当然前提是t>=A【i】）；A是整数数组
+     * 即
+     * dp[i][j][t]=dp[i-1][j][t];
+     *  if (t>=A[i])//注意是大于等于;
+     * {
+     *  dp[i][j][t]+=dp[i-1][j-1][t-A[i]];
+     *  }
+     *
+     * 意思就是，每个元素都有两种状态，取或者不取：
+     *（1）若不取A[i]这个值，当前方案数等于从前i-1个数中取j个使其和为t的方案数，即dp[i - 1][j][t]。
+     *（2）若取当前值A[i]，则当前方案数等于从前i-1个数中取j-1个使其和为t的方案数再加上考虑A[i]的情况，
+     * 即dp[i - 1][j - 1][t - A[i]]（前提是t - A[i]要大于等于0）。
+     *
+     * */
+    @Test
+    public void kNum() {
+        int[] arr = {1, 2, 3, 4, 5, 6};
+        int k = 2;
+        int t = 5;
+        int[][][] dp = new int[arr.length + 1][k + 1][t + 1];
+        //初始化
+        for (int i = 0; i <= arr.length; i++) {
+            dp[i][0][0] = 1;
+        }
+        for (int i = 1; i <= arr.length; i++) {
+            for (int j = 1; j <= k && j <= i; j++) {
+                for (int z = 1; z <= t; z++) {
+                    //不取第i个数的方案数
+                    dp[i][j][z] = dp[i - 1][j][z];
+                    if (z >= arr[i - 1])//这里要注意考虑z=arr[i-1]的情况
+                        //取第i个数的方案，则前i-1个数中取j-1个
+                        dp[i][j][z] += dp[i - 1][j - 1][z - arr[i - 1]];
+
+                    System.out.println(String.format("debug --> dp[%s][%s][%s] = %s", i, j, z, dp[i][j][z]));
+                }
+            }
+        }
+        System.out.println(dp[arr.length][k][t]);
+    }
+
+    /*
+     * 空间优化kNum
+     * 从普通版可以看到数组仅仅依赖上一轮循环的j取值数
+     * dp[i][j][t]=dp[i-1][j][t]+dp[i-1][j-1][t-A[i]]
+     * 简化一个维度：
+     * dp[j][t]=dp[j][t]+dp[j-1][t-a[i]]
+     * 【因为依赖上一轮的[j-1][t-A[i]] 只能倒序遍历】
+     * 可以参考背包问题，背包问题dp数组优化是当前行代替上一行。这里dp是三维数组，省去一维就是当前二维表代替上一个二维表。
+     * 同理，为避免覆盖问题，j和t索引要从后向前遍历
+     * */
+    @Test
+    public void kNum2() {
+        int[] arr = {1, 2, 3, 4, 5, 6};
+        int k = 2;
+        int t = 5;
+        int[][] dp = new int[k + 1][t + 1];
+        //初始化
+        dp[0][0] = 1;
+        for (int i = 0; i <= arr.length; i++) {
+            for (int j = k; 0 <= j; j--) {
+                for (int z = t; z >= 0; z--) {
+                    //不取第i个数的方案数
+                    if (i >= 1 && j >= 1 && z >= arr[i - 1])//这里要注意考虑z=arr[i-1]的情况
+                        //取第i个数的方案，则前i-1个数中取j-1个
+                        dp[j][z] += dp[j - 1][z - arr[i - 1]];
+                    System.out.println(String.format("debug --> dp[%s][%s] = %s", j, z, dp[j][z]));
+                }
+            }
+        }
+        System.out.println(dp[k][t]);
+    }
 }
