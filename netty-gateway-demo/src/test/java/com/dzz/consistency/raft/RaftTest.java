@@ -69,10 +69,17 @@ package com.dzz.consistency.raft;
  * 2、通常对Log的Commit方式都是Leader统计成功AppendEntry的节点是否过半数。
  * > 在节点频发Crash的场景下 旧Leader Commit的Log Entry可能会被后续的Leader用不同的Log Entry覆盖，从而导致数据丢失。
  * > 造成这种错误的根本原因是Leader在Commit后突然Crash，拥有这条Entry的节点并不一定能在之后的选主中胜出。
- * > 这种情况在论文中有详细的介绍。Raft很巧妙的限制【Leader只能对自己本Term的提案采用统计大多数的方式Commit】，
+ * > 这种情况在论文中有详细的介绍。Raft很巧妙的限制【Leader只能对自己本Term的提案采用统计大多数的方式Commit，保证拥有最新最大term得节点选举成功】，
  * > 而旧Term的提案则利用“Commit的Log之前的所有Log都顺序Commit”的机制来提交，从而解决了这个问题。
  * > 另一篇博客中针对这个问题有更详细的阐述Why Raft never commits log entries from previous terms directly
+ *
+ * Safety：Raft 中最关键的 safety property 是 State Machine Safety Property：
+ * 当任一机器 apply 了某一特定 log entry 到其 state machine 中，则其余服务器都不可能 apply 了一个 index 相同但 command 不同的 log。具体来说即添加了以下两个限制：
+ * 1. leader election 限制：为了避免数据从 Follower 到 Leader 的反向流动带来的复杂性，Raft 限制新 Leader 一定是当前 Log 最新的节点，即其拥有最多最大 term的 Log Entry
+ * 2.log replication 限制：Leader 只能对自己本 Term 的 entry 采用统计大多数的方式进行 commit，
+ * 而旧 Term 的 entry 则利用 “committed entry 之前的所有 Log entry 都已顺序 commit”的机制来提交（Why Raft never commits log entries from previous terms directly）
  * <p>
+ *     ==简单的说安全性就是新的leader节点一定包含以前所有提交得日志，而且本身的term一定最大最新==
  * <p>
  * <p>
  * <p>
