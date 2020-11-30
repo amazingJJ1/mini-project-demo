@@ -38,7 +38,7 @@
 
 
 
-- Percolator系统的两阶段提交
+#### Percolator系统的两阶段提交
 
 - - 概述：percolator是google基于bigtable实现的分布式数据库，在bigtable单行事务的基础上，它使用全局的Timestamp Server来实现分布式的mvcc（后续专门讨论，本文不展开了）；还有2PC协议来实现多行事务。由于bigtable屏蔽了数据sharding的细节，在percolator看来事务修改的每一行记录，都被看作一个参与者，事务没有区分预处理和prepare阶段，可以认为事务开始后，即进入了2PC的prepare阶段。
     percolator的2PC协调者并不持久化状态，而是引入primary record的概念，将事务执行过程中修改的第一个record作为primary record，在这个record中记录本次事务的状态，而在事务执行过程中其他被修改的record里面记录primary record的key（这里我觉得priamry record保存单独的表中更优雅，否则priamry record被用户删除的话，并不好处理）。在commit阶段，先在primary record中记录事务状态（包括事务ID，mvcc版本号等），成功后，才将各个参与者的修改提交（包括持久化mvcc版本号，释放行锁等）。在事务执行过程中，如果协调者宕机，那么其他参与者可以通过查询primary record中保存的事务状态来决定回滚或提交本地的修改。
